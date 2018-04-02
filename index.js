@@ -2,7 +2,9 @@ const http = require('http');
 const axios = require('axios');
 const fs = require('fs-extra');
 const dicom = require('dicom-parser/dist/dicomParser');
+require('dotenv').load();
 
+const imageRootDir = process.env.IMAGE_ROOT_DIR;
 const hostname = '0.0.0.0';
 const port = 3000;
 
@@ -12,7 +14,6 @@ const server = http.createServer((req, res) => {
 
   req.on('data', function(chunk) {
     response = JSON.parse(chunk);
-    //console.log("BODY: " + chunk);
 
     response.uris.map(url => {
       axios
@@ -22,8 +23,8 @@ const server = http.createServer((req, res) => {
         .then(result => {
           try {
             const { studyUid, imageUid } = getUids(result.data);
-            const outputFilename = `./tmp/${studyUid}/${imageUid}.dcm`;
-            fs.ensureDirSync(`./tmp/${studyUid}`);
+            const outputFilename = `${imageRootDir}/${studyUid}/${imageUid}.dcm`;
+            fs.ensureDirSync(`${imageRootDir}/${studyUid}`);
 
             fs.writeFileSync(outputFilename, result.data);
             console.log(`Wrote file ${outputFilename}`);
