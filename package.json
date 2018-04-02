@@ -9,6 +9,8 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "axios": "^0.18.0"
+    "axios": "^0.18.0",
+    "dicom-parser": "^1.7.6",
+    "fs-extra": "^5.0.0"
   }
 }
