@@ -1,6 +1,8 @@
 const http = require('http');
 const axios = require('axios');
 const fs = require('fs-extra');
+const util = require('util');
+const exec = util.promisify(require('child_process').exec);
 const dicom = require('dicom-parser/dist/dicomParser');
 require('dotenv').load();
 
@@ -25,7 +27,8 @@ const server = http
       .on('end', () => {
         body = Buffer.concat(body).toString();
         response = JSON.parse(body);
-        response.uris.map(url => {
+        let studyFolder;
+        await Promise.all(response.uris.map(url =>
           axios
             .get(url, {
               responseType: 'arraybuffer'
@@ -33,11 +36,14 @@ const server = http
             .then(result => {
               try {
                 const { studyUid, imageUid } = getUids(result.data);
+                studyFolder = `${imageRootDir}/${studyUid}`;
                 const outputFilename = `${imageRootDir}/${studyUid}/${imageUid}.dcm`;
-                fs.ensureDirSync(`${imageRootDir}/${studyUid}`);
-
+                fs.ensureDirSync(studyFolder);
                 fs.writeFileSync(outputFilename, result.data);
                 console.log(`Wrote file ${outputFilename}`);
+
+                await preProcessToPng(studyFolder);
+
               } catch (err) {
                 console.error(err);
               }
@@ -45,7 +51,9 @@ const server = http
             .catch(err => {
               console.error(err.message);
             });
-        });
+        ));
+        await runModel(studyFolder + '/preprocess');
+
       });
     res.statusCode = 200;
     res.setHeader('Content-Type', 'text/plain');
@@ -61,3 +69,20 @@ const getUids = dicomData => {
   const imageUid = dataSet.string('x00080018');
   return { studyUid, imageUid };
 };
+
+const preProcessToPng = async (directory) => {
+  const fileList = fs.readdirSync(directory);
+  await Promise.all(fileList.map(file =>
+    exec(`gdcm2vtk ${directory + '/' + file} ${directory + '/preprocess/' +
+          file.split('.')[0] + '.png'}`)
+  ));
+  return;
+}
+
+const runModel = async (directory) => {
+  const fileList = fs.readdirSync(directory);
+  await Promise.all(fileList.map(file =>
+    exec(`${modelCommand} ${directory + '/' + file}`)
+  ));
+  return;
+}
