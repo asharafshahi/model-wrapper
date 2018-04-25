@@ -53,14 +53,17 @@ const handleDicomInitiatedRequest = async reqBody => {
   try {
     const { studyUID, studyFolder } = JSON.parse(reqBody);
     // pre-process 
-    await exec(`${preProcessCmd} studyFolder ${preProcessDir}/${studyUID}`);
+    fs.ensureDirSync(`${preProcessDir}/${studyUID}`);
+    await exec(`${preProcessCmd} ${studyFolder} ${preProcessDir}/${studyUID}`);
     // process all files through model, returns array of results
     const result = await runModel(`${preProcessDir}/${studyUID}`);
+    fs.ensureDirSync(`${modelOutputDir}/${studyUID}`);
     await writeFilePromise(`${modelOutputDir}/${studyUID}/result.csv`, result.join(), 'utf8');
     // post-process results
+    fs.ensureDirSync(`${postProcessDir}/${studyUID}`);
     await exec(`${postProcessCmd} ${modelOutputDir}/${studyUID}/result.csv` `${postProcessDir}/${studyUID}`);
     const transactionId = await aiTransactions.createTransaction(serviceId, studyUID, '0000000');
-    await aiTransactions.uploadResult(transactionId, serviceKey, 'test', final)
+    await aiTransactions.uploadResultFile(transactionId, serviceKey, 'test', `${postPorcessDir}/${studyUID}/post_output.json`);
   } catch (err) {
     console.error(err);
   }
