@@ -1,5 +1,5 @@
 {
-  "name": "testendpoint",
+  "name": "mode-endpoint",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
@@ -9,6 +9,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@nuance/ai-marketplace-api": "git+https://github.com/asharafshahi/ai-marketplace-api.git",
     "axios": "^0.18.0",
     "dicom-parser": "^1.7.6",
     "dotenv": "^5.0.1",
