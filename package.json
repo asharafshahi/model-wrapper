@@ -1,7 +1,7 @@
 {
-  "name": "mode-endpoint",
+  "name": "model-wrapper",
   "version": "1.0.0",
-  "description": "",
+  "description": "wrapper code for models to handle AI Job Dispatcher initiated or DICOM initiated requests.",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
