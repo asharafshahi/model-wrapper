@@ -1,6 +1,5 @@
 const http = require('http');
 const axios = require('axios');
-const FormData = require('form-data');
 const fs = require('fs-extra');
 const util = require('util');
 const exec = util.promisify(require('child_process').exec);
@@ -10,7 +9,6 @@ const aiMktApi = require('@nuance/ai-marketplace-api');
 require('dotenv').load();
 
 const imageRootDir = process.env.IMAGE_ROOT_DIR;
-const AiMktPlaceAPI = process.env.AI_TRANSACTIONS_ENDPOINT;
 const serviceId = process.env.AI_SERVICE_ID;
 const serviceKey = process.env.SERVICE_KEY;
 const hostname = '0.0.0.0';
@@ -24,8 +22,7 @@ const modelEndpoint = 'http://127.0.0.1:8000/score/?file=';
 const aiTransactions = new aiMktApi(process.env.AI_TRANSACTIONS_ENDPOINT, 
   process.env.AI_TRANSACTIONS_KEY)
   
-const server = http
-  .createServer((req, res) => {
+http.createServer((req, res) => {
     console.log(`\n${req.method} ${req.url}`);
     console.log(req.headers);
     let body = [];
@@ -64,7 +61,7 @@ const handleDicomInitiatedRequest = async reqBody => {
     await exec(`${postProcessCmd} ${modelOutputDir}/${studyUID}/result.csv` `${postProcessDir}/${studyUID}`);
     const transactionId = await aiTransactions.createTransaction(serviceId, studyUID, '0000000');
     const resultId = await aiTransactions.createResult(transactionId, serviceKey, 'test');
-    await aiTransactions.uploadResultFiles(transactionId, resultId, [`${postPorcessDir}/${studyUID}/post_output.json`]);
+    await aiTransactions.uploadResultFiles(transactionId, resultId, [`${postProcessDir}/${studyUID}/post_output.json`]);
   } catch (err) {
     console.error(err);
   }

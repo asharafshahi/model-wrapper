@@ -15,5 +15,8 @@
     "dotenv": "^5.0.1",
     "form-data": "^2.3.2",
     "fs-extra": "^5.0.0"
+  },
+  "devDependencies": {
+    "eslint": "^4.19.1"
   }
 }
