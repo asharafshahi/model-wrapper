@@ -1,6 +1,7 @@
 const http = require('http');
 const axios = require('axios');
 const fs = require('fs-extra');
+const FormData = require('form-data');
 const util = require('util');
 const exec = util.promisify(require('child_process').exec);
 const writeFilePromise = util.promisify(fs.writeFile);
@@ -18,7 +19,8 @@ const preProcessDir = process.env.PRE_PROCESS_OUTPUT_DIR;
 const modelOutputDir = process.env.MODEL_OUTPUT_DIR;
 const postProcessDir = process.env.POST_PROCESS_OUTPUT_DIR;
 const postProcessCmd = process.env.EXTERNAL_POSTPROCESS_CMD;
-const modelEndpoint = 'http://127.0.0.1:8000/score/?file=';
+// const modelEndpoint = 'http://127.0.0.1:8000/score/?';
+const modelEndpoint = process.env.MODEL_ENDPOINT;
 const aiTransactions = new aiMktApi(process.env.AI_TRANSACTIONS_ENDPOINT, 
   process.env.AI_TRANSACTIONS_KEY)
   
@@ -53,7 +55,7 @@ const handleDicomInitiatedRequest = async reqBody => {
     fs.ensureDirSync(`${preProcessDir}/${studyUID}`);
     await exec(`${preProcessCmd} ${studyFolder} ${preProcessDir}/${studyUID}`);
     // process all files through model, returns array of results
-    const result = await runModel(`${preProcessDir}/${studyUID}`);
+    const result = await runModel_type_1(`${preProcessDir}/${studyUID}`);
     fs.ensureDirSync(`${modelOutputDir}/${studyUID}`);
     await writeFilePromise(`${modelOutputDir}/${studyUID}/result.csv`, result.join(), 'utf8');
     // post-process results
@@ -70,29 +72,34 @@ const handleDicomInitiatedRequest = async reqBody => {
 const handleAIMarketplaceRequest = async reqBody => {
   try {
     const { transactionId, uris } = JSON.parse(reqBody);
-    let studyFolder;
+    let studyFolder, studyUid, imageUid;
     await Promise.all(
       uris.map(async url => {
         try {
           const result = await axios.get(url, {
             responseType: 'arraybuffer'
           });
-          const { studyUid, imageUid } = getUids(result.data);
+          ({ studyUid, imageUid } = getUids(result.data));
           studyFolder = `${imageRootDir}/${studyUid}`;
           const outputFilename = `${imageRootDir}/${studyUid}/${imageUid}.dcm`;
           fs.ensureDirSync(studyFolder);
           fs.writeFileSync(outputFilename, result.data);
           console.log(`Wrote file ${outputFilename}`);
-          await preProcessToPng(studyFolder);
+          fs.ensureDirSync(`${preProcessDir}/${studyUid}`);
+          await exec(`${preProcessCmd} ${studyFolder} ${preProcessDir}/${studyUid}`);
         } catch (err) {
           console.error(err);
         }
       })
     );
-    const result = await runModel(studyFolder + '/preprocess');
-    console.log(`AI model returned: ${result[0].data}`);
-    const postProcessedData = postProcessToJson(result);
-    await aiTransactions.uploadResult(transactionId, serviceKey, 'test', postProcessedData);
+    const result = await runModel_type_2(`${preProcessDir}/${studyUid}`);
+    console.log(`AI model returned: ${result}`);
+    fs.ensureDirSync(`${postProcessDir}/${studyUid}`);
+    await exec(`${postProcessCmd} ${modelOutputDir}/${studyUid}/model_output.txt` `${postProcessDir}/${studyUid}`);
+    const fileList = fs.readdirSync(`${postProcessDir}/${studyUid}`);
+    const resultId = await aiTransactions.createResult(transactionId, serviceKey, 'test');
+    await aiTransactions.uploadResultFiles(transactionId, resultId, fileList);
+    console.log(`AI analysis results successfully uplaoded to API.`);
   } catch (err) {
     console.error(err);
   }
@@ -122,15 +129,35 @@ const preProcessToPng = async directory => {
   return;
 };
 
-const runModel = async directory => {
+// Model invokation type 1 is a GET request with a file directory path 
+// passed in as a URL parameter
+const runModel_type_1 = async directory => {
   const fileList = fs.readdirSync(directory);
   return await Promise.all(
     fileList.map(file => {
-      const url = `${modelEndpoint}${directory + '/' + file}`;
+      const url = `${modelEndpoint}file=${directory + '/' + file}`;
       console.log(url);
       return axios.get(url);
     })
   );
+};
+
+// Model invokation type 2 is a POST request with multi-part form data
+// passing the image file itself in the request
+const runModel_type_2 = async directory => {
+  const studyUid = directory.split('/')[1];
+  const fileList = fs.readdirSync(directory);
+  const results = await Promise.all(
+    fileList.map(file => {
+      const form = new FormData();
+      form.append('image', fs.createReadStream(file));
+      return axios.post(modelEndpoint, form);
+    })
+  );
+  const modelOutputFile = fs.createWriteStream(`${modelOutputDir}/${studyUid}/model_output.txt`);
+  results.forEach(v => modelOutputFile.write(v + '\n'));
+  modelOutputFile.end();
+  return results;
 };
 
 // This function will be customized/replaced for each model based on needs
