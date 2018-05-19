@@ -11,10 +11,14 @@
   "dependencies": {
     "@nuance/ai-marketplace-api": "git+https://github.com/asharafshahi/ai-marketplace-api.git",
     "axios": "^0.18.0",
+    "bluebird": "^3.5.1",
     "dicom-parser": "^1.7.6",
     "dotenv": "^5.0.1",
     "form-data": "^2.3.2",
-    "fs-extra": "^5.0.0"
+    "fs-extra": "^5.0.0",
+    "node-fetch": "^2.1.2",
+    "request": "^2.86.0",
+    "request-promise-native": "^1.0.5"
   },
   "devDependencies": {
     "eslint": "^4.19.1"

@@ -1,7 +1,9 @@
 const http = require('http');
 const axios = require('axios');
 const fs = require('fs-extra');
-const FormData = require('form-data');
+const request = require('request');
+const bbPromise = require('bluebird');
+const requestPromise = require('request-promise-native');
 const util = require('util');
 const exec = util.promisify(require('child_process').exec);
 const writeFilePromise = util.promisify(fs.writeFile);
@@ -73,8 +75,8 @@ const handleAIMarketplaceRequest = async reqBody => {
   try {
     const { transactionId, uris } = JSON.parse(reqBody);
     let studyFolder, studyUid, imageUid;
-    await Promise.all(
-      uris.map(async url => {
+    console.log(`Downloading ${uris.length} images for study`); 
+    await bbPromise.map(uris, async url => {
         try {
           const result = await axios.get(url, {
             responseType: 'arraybuffer'
@@ -84,22 +86,26 @@ const handleAIMarketplaceRequest = async reqBody => {
           const outputFilename = `${imageRootDir}/${studyUid}/${imageUid}.dcm`;
           fs.ensureDirSync(studyFolder);
           fs.writeFileSync(outputFilename, result.data);
-          console.log(`Wrote file ${outputFilename}`);
-          fs.ensureDirSync(`${preProcessDir}/${studyUid}`);
-          await exec(`${preProcessCmd} ${studyFolder} ${preProcessDir}/${studyUid}`);
         } catch (err) {
           console.error(err);
         }
-      })
-    );
+      }, { concurrency: 20 }
+    );    
+  
+    console.log('All images for study downloaded');
+    fs.ensureDirSync(`${preProcessDir}/${studyUid}`);
+    await exec(`${preProcessCmd} ${studyFolder} ${preProcessDir}/${studyUid}`);
+    console.log('Preprocessing of images for study complete');
     const result = await runModel_type_2(`${preProcessDir}/${studyUid}`);
-    console.log(`AI model returned: ${result}`);
+    console.log('Model evaluation for all images complete');
     fs.ensureDirSync(`${postProcessDir}/${studyUid}`);
-    await exec(`${postProcessCmd} ${modelOutputDir}/${studyUid}/model_output.txt` `${postProcessDir}/${studyUid}`);
-    const fileList = fs.readdirSync(`${postProcessDir}/${studyUid}`);
-    const resultId = await aiTransactions.createResult(transactionId, serviceKey, 'test');
+    await exec(`${postProcessCmd} ${modelOutputDir}/${studyUid} ${postProcessDir}/${studyUid}`);
+    console.log('Post processing of model results complete');
+    const fileList = fs.readdirSync(`${postProcessDir}/${studyUid}`).map(name => `${postProcessDir}/${studyUid}/${name}`);
+    const resultId = await aiTransactions.createResult(transactionId, 'OSU-2017', 'OSU-2017', 'FROM_AI_SERVICE' );
     await aiTransactions.uploadResultFiles(transactionId, resultId, fileList);
-    console.log(`AI analysis results successfully uplaoded to API.`);
+    await aiTransactions.updateTransaction(transactionId, { status: 'ANALYSIS_COMPLETE' })
+    console.log(`AI analysis results successfully uplaoded to API for transaction ${transactionId}.`);
   } catch (err) {
     console.error(err);
   }
@@ -145,19 +151,20 @@ const runModel_type_1 = async directory => {
 // Model invokation type 2 is a POST request with multi-part form data
 // passing the image file itself in the request
 const runModel_type_2 = async directory => {
-  const studyUid = directory.split('/')[1];
+  const studyUid = directory.split('/').slice(-1);
   const fileList = fs.readdirSync(directory);
   const results = await Promise.all(
     fileList.map(file => {
-      const form = new FormData();
-      form.append('image', fs.createReadStream(file));
-      return axios.post(modelEndpoint, form);
+      const formData = {
+        image: fs.createReadStream(directory + '/' + file)
+      }  
+      return requestPromise.post({ url: modelEndpoint, formData})
     })
   );
-  const modelOutputFile = fs.createWriteStream(`${modelOutputDir}/${studyUid}/model_output.txt`);
-  results.forEach(v => modelOutputFile.write(v + '\n'));
-  modelOutputFile.end();
-  return results;
+  fs.ensureDirSync(`${modelOutputDir}/${studyUid}`);
+  resultStr = results.reduce((acc, val) => acc + val + '\n', '');
+  fs.writeFileSync(`${modelOutputDir}/${studyUid}/model_output.txt`, resultStr);
+  return resultStr;
 };
 
 // This function will be customized/replaced for each model based on needs
