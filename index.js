@@ -34,17 +34,18 @@ http.createServer((req, res) => {
       .on('data', chunk => {
         body.push(chunk);
       })
-      .on('end', async () => {
+      .on('end', () => {
         body = Buffer.concat(body).toString();
         if (req.url === '/') {
+          console.log('Received complete request from AI Job Dispatcher'); 
           handleAIMarketplaceRequest(body);
         } else if (req.url === '/dicomInitiated') {
           handleDicomInitiatedRequest(body);
         }
+        res.statusCode = 200;
+        res.setHeader('Content-Type', 'text/plain');
+        res.end('Acknowledged\n');
       });
-    res.statusCode = 200;
-    res.setHeader('Content-Type', 'text/plain');
-    res.end('Acknowledged\n');
   })
   .listen(port, hostname, () => {
     console.log(`Server running at http://localhost:${port}/`);
