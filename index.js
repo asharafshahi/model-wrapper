@@ -1,7 +1,6 @@
 const http = require('http');
 const axios = require('axios');
 const fs = require('fs-extra');
-const request = require('request');
 const bbPromise = require('bluebird');
 const requestPromise = require('request-promise-native');
 const util = require('util');
@@ -97,7 +96,7 @@ const handleAIMarketplaceRequest = async reqBody => {
     fs.ensureDirSync(`${preProcessDir}/${studyUid}`);
     await exec(`${preProcessCmd} ${studyFolder} ${preProcessDir}/${studyUid}`);
     console.log('Preprocessing of images for study complete');
-    const result = await runModel_type_2(`${preProcessDir}/${studyUid}`);
+    await runModel_type_2(`${preProcessDir}/${studyUid}`);
     console.log('Model evaluation for all images complete');
     fs.ensureDirSync(`${postProcessDir}/${studyUid}`);
     await exec(`${postProcessCmd} ${modelOutputDir}/${studyUid} ${postProcessDir}/${studyUid}`);
@@ -163,7 +162,7 @@ const runModel_type_2 = async directory => {
     })
   );
   fs.ensureDirSync(`${modelOutputDir}/${studyUid}`);
-  resultStr = results.reduce((acc, val) => acc + val + '\n', '');
+  const resultStr = results.reduce((acc, val) => acc + val + '\n', '');
   fs.writeFileSync(`${modelOutputDir}/${studyUid}/model_output.txt`, resultStr);
   return resultStr;
 };
